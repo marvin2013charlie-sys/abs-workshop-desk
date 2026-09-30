@@ -16,10 +16,6 @@ on:
 permissions:
   contents: write
 
-# One release holds every download; its updates go one at a time.
-concurrency:
-  group: publish-desk
-  cancel-in-progress: false
 
 jobs:
   build-test-publish:
@@ -137,12 +133,15 @@ jobs:
         run: |
           $prev = "prev\ABS-Workshop-Desk-Setup.exe"
           if (-not (Test-Path $prev)) { "No earlier version to update from"; exit 0 }
+          $appDir = Join-Path $env:LOCALAPPDATA "Programs\abs-workshop-desk"
+          if (Test-Path $appDir) { Remove-Item $appDir -Recurse -Force }
           Start-Process -FilePath $prev -ArgumentList "/S" -Wait
           $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "ABS MOTS.exe" | Select-Object -First 1).FullName
           $old = (Get-Item $exe).VersionInfo.ProductVersion
           "Installed the earlier version: $old"
-          if (-not (Test-Path (Join-Path (Split-Path $exe) "resources\app-update.yml"))) {
-            "That version came before self-update, so it cannot update itself; every version from now on can."
+          # Self-update arrived in 1.4.3; 1.4.0 (the first build) cannot update itself.
+          if ([version]$old -lt [version]"1.4.3") {
+            "That version came before self-update, so it cannot update itself; every version from 1.4.3 can."
             Start-Process -FilePath (Get-ChildItem (Split-Path $exe) -Filter "Uninstall*.exe").FullName -ArgumentList "/S" -Wait
             exit 0
           }

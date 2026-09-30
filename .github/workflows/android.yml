@@ -12,10 +12,6 @@ on:
 permissions:
   contents: write
 
-# One release holds every download; its updates go one at a time.
-concurrency:
-  group: publish-desk
-  cancel-in-progress: false
 
 jobs:
   build-test-publish:
@@ -48,7 +44,7 @@ jobs:
           mkdir -p keystore
           echo "$ANDROID_KEYSTORE_B64" | base64 -d > keystore/abs-mots.p12
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          gradle assembleRelease --no-daemon -q
+          gradle assembleRelease --no-daemon -q -PversionCode=$((1000 + ${{ github.run_number }})) -PversionName=1.4.${{ github.run_number }}
           mkdir -p ../dist
           cp app/build/outputs/apk/release/app-release.apk ../dist/ABS-Workshop-Desk.apk
           rm -f keystore/abs-mots.p12

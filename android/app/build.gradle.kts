@@ -28,8 +28,9 @@ android {
         applicationId = "uk.co.absmotsauto.admin"
         minSdk = 24
         targetSdk = 34
-        versionCode = 140
-        versionName = "1.4.0"
+        // CI passes -PversionCode / -PversionName so each build installs as an update.
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 140
+        versionName = (project.findProperty("versionName") as String?) ?: "1.4.0"
     }
 
     signingConfigs {
