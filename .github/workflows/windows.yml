@@ -3,10 +3,23 @@ name: Windows app
 on:
   push:
     branches: [main]
+    paths:
+      - "main.js"
+      - "preload.js"
+      - "package.json"
+      - "package-lock.json"
+      - "icon.*"
+      - "test/desk-check.mjs"
+      - ".github/workflows/windows.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# One release holds every download; its updates go one at a time.
+concurrency:
+  group: publish-desk
+  cancel-in-progress: false
 
 jobs:
   build-test-publish:
@@ -85,13 +98,14 @@ jobs:
       - name: 6. Publish the download
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: windows-${{ github.run_number }}
-          name: ABS Workshop Desk for Windows (build ${{ github.run_number }})
+          tag_name: desk
+          name: ABS Workshop Desk
           body: |
-            ABS MOTs & Auto Repairs admin desk for Windows. Sign in with the workshop email and password.
+            The ABS MOTs & Auto Repairs admin desk as an app. Sign in with the workshop email and password.
 
-            Download: https://www.absmotsauto.co.uk/admin/download/windows
+            **Windows:** https://www.absmotsauto.co.uk/admin/download/windows
+            **Android:** https://www.absmotsauto.co.uk/admin/download/android
 
-            Checked on Windows before publishing: installed, opened the ABS admin desk, reached the website, uninstalled.
+            Every build is installed, opened and checked on Windows or an Android phone before it is published.
           files: dist/ABS-Workshop-Desk-Setup.exe
           make_latest: true

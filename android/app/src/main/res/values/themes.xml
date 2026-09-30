@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AbsMots" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/abs_black</item>
+        <item name="android:statusBarColor">@color/abs_bar</item>
+        <item name="android:navigationBarColor">@color/abs_bar</item>
+        <item name="colorPrimary">@color/abs_accent</item>
+        <item name="android:colorBackground">@color/abs_black</item>
+    </style>
+</resources>

@@ -1,0 +1,102 @@
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "test/android-check.sh"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One release holds every download; its updates go one at a time.
+concurrency:
+  group: publish-desk
+  cancel-in-progress: false
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: 1. Build the Android app (signed)
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ABS_KEYSTORE_PASSWORD: ${{ secrets.ABS_KEYSTORE_PASSWORD }}
+          ABS_KEY_PASSWORD: ${{ secrets.ABS_KEY_PASSWORD }}
+        run: |
+          mkdir -p keystore
+          echo "$ANDROID_KEYSTORE_B64" | base64 -d > keystore/abs-mots.p12
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          gradle assembleRelease --no-daemon -q
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk ../dist/ABS-Workshop-Desk.apk
+          rm -f keystore/abs-mots.p12
+
+      - name: 2. Check it is signed with the ABS key
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$APKSIGNER" verify --print-certs dist/ABS-Workshop-Desk.apk | tee signer.txt
+          grep -q "ABS MOTs & Auto Repairs" signer.txt || { echo "Not signed with the ABS key"; exit 1; }
+          echo "APK size: $(du -h dist/ABS-Workshop-Desk.apk | cut -f1)"
+
+      - name: Allow the emulator to use hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: 3. Install on an Android phone (emulator), open, check, uninstall
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash test/android-check.sh dist/ABS-Workshop-Desk.apk
+
+      - name: Keep the APK and screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-app
+          path: |
+            dist/ABS-Workshop-Desk.apk
+            android-screen.png
+            ui.xml
+            logcat.txt
+          if-no-files-found: ignore
+
+      - name: 4. Publish the download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desk
+          name: ABS Workshop Desk
+          body: |
+            The ABS MOTs & Auto Repairs admin desk as an app. Sign in with the workshop email and password.
+
+            **Windows:** https://www.absmotsauto.co.uk/admin/download/windows
+            **Android:** https://www.absmotsauto.co.uk/admin/download/android
+
+            Every build is installed, opened and checked on Windows or an Android phone before it is published.
+          files: dist/ABS-Workshop-Desk.apk
+          make_latest: true

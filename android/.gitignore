@@ -1,0 +1,14 @@
+.gradle/
+**/build/
+local.properties
+keystore.properties
+.idea/
+captures/
+*.apk
+*.aab
+.DS_Store
+
+# Android signing key: back it up, never commit it
+keystore/
+*.p12
+*.jks
