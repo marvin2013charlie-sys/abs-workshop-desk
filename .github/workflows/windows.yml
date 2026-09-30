@@ -153,9 +153,10 @@ jobs:
             $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "ABS MOTS.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
             $now = if ($exe) { (Get-Item $exe).VersionInfo.ProductVersion } else { "" }
             "Installed version: $now"
-          } until ($now -eq $env:NEW_VERSION -or (Get-Date) -gt $deadline)
+          } until (($now -and [version]$now -ge [version]$env:NEW_VERSION) -or (Get-Date) -gt $deadline)
           Stop-Process -Name "ABS MOTS" -Force -ErrorAction SilentlyContinue
-          if ($now -ne $env:NEW_VERSION) { throw "The installed app did not update itself from $old to $env:NEW_VERSION" }
+          # Windows reports four parts (1.4.4.0), the build three (1.4.4).
+          if (-not $now -or [version]$now -lt [version]$env:NEW_VERSION) { throw "The installed app did not update itself from $old to $env:NEW_VERSION" }
           "Updated itself from $old to $now with nobody touching it"
           Start-Sleep -Seconds 3
           Start-Process -FilePath (Get-ChildItem (Split-Path $exe) -Filter "Uninstall*.exe").FullName -ArgumentList "/S" -Wait
