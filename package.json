@@ -34,7 +34,9 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ]
     },
@@ -46,7 +48,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -58,10 +62,21 @@
       "createStartMenuShortcut": true,
       "shortcutName": "ABS MOTS",
       "uninstallDisplayName": "ABS MOTS"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "marvin2013charlie-sys",
+        "repo": "abs-workshop-desk",
+        "releaseType": "release"
+      }
+    ]
   },
   "devDependencies": {
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

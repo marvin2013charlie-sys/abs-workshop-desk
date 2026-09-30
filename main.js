@@ -1,4 +1,5 @@
-const { app, BrowserWindow, shell, Menu, dialog, ipcMain, nativeImage } = require("electron");
+const { app, BrowserWindow, shell, Menu, dialog, ipcMain, nativeImage, powerMonitor } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const https = require("https");
 
@@ -121,7 +122,12 @@ function createWindow() {
             const id = String(data.build || "");
             if (!id) return;
             if (lastBuild && lastBuild !== id) {
-              win.webContents.reloadIgnoringCache();
+              // The page reloads itself once nobody is mid-edit (desk.js).
+              win.webContents
+                .executeJavaScript("window.__absUpdateReady ? (window.__absUpdateReady(), true) : false")
+                .then((handled) => { if (!handled) win.webContents.reloadIgnoringCache(); })
+                .catch(() => win.webContents.reloadIgnoringCache());
+              lastBuild = id;
               return;
             }
             lastBuild = id;
@@ -154,6 +160,33 @@ function createWindow() {
       "Could not open the admin desk.\n\nCheck the internet connection and try again.\n\n" + desc
     );
   });
+}
+
+// The app itself updates from the GitHub release on its own: it downloads a
+// new version quietly and installs it once the computer has had no keyboard
+// or mouse for 10 minutes (or when the app is closed), then reopens. Nobody
+// reinstalls, and nobody loses work to an update.
+const UPDATE_WHEN_IDLE_S = 10 * 60;
+function startAutoUpdate() {
+  if (!app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  let downloaded = false;
+  const installIfIdle = () => {
+    if (!downloaded) return;
+    let idle = 0;
+    try { idle = powerMonitor.getSystemIdleTime(); } catch { idle = 0; }
+    if (idle >= UPDATE_WHEN_IDLE_S || process.env.ABS_UPDATE_NOW === "1") autoUpdater.quitAndInstall(true, true);
+  };
+  autoUpdater.on("update-downloaded", () => {
+    downloaded = true;
+    installIfIdle();
+  });
+  autoUpdater.on("error", () => {});
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  setTimeout(check, 10 * 1000);
+  setInterval(check, 3 * 60 * 60 * 1000);
+  setInterval(installIfIdle, 60 * 1000);
 }
 
 function badgeImage(count) {
@@ -238,6 +271,7 @@ app.whenReady().then(() => {
     },
   ]));
   createWindow();
+  startAutoUpdate();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

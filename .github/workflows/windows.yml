@@ -32,11 +32,19 @@ jobs:
         with:
           node-version: "22"
 
-      - name: 1. Install build tools
-        run: npm ci
+      - name: 1. Install build tools and set this build's version
+        shell: pwsh
+        run: |
+          npm ci
+          npm version "1.4.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+          "NEW_VERSION=1.4.${{ github.run_number }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: 2. Build the Windows installer
-        run: npx electron-builder --win nsis --x64 --publish never
+        shell: pwsh
+        run: |
+          npx electron-builder --win nsis --x64 --publish never
+          if (-not (Select-String -Path dist\latest.yml -Pattern "version: $env:NEW_VERSION" -Quiet)) { throw "latest.yml (what installed apps update from) is missing or has the wrong version" }
+          Get-Content dist\latest.yml
 
       - name: 3. Install it (as a user would, silently)
         shell: pwsh
@@ -47,7 +55,9 @@ jobs:
           Start-Process -FilePath $setup -ArgumentList "/S" -Wait
           $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "ABS MOTS.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $exe) { throw "ABS MOTS.exe was not installed" }
-          "Installed: $($exe.FullName)"
+          "Installed: $($exe.FullName) (version $((Get-Item $exe.FullName).VersionInfo.ProductVersion))"
+          if (-not (Test-Path (Join-Path $exe.DirectoryName "resources\app-update.yml"))) { throw "The app has no self-update settings" }
+          "Self-update settings: OK"
           "EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           $desktop = [Environment]::GetFolderPath("Desktop")
           $start = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
@@ -95,6 +105,15 @@ jobs:
             windows-screen.png
           if-no-files-found: ignore
 
+      - name: Keep the version now published (to test updating from it)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force prev | Out-Null
+          gh release download desk -R ${{ github.repository }} -p "ABS-Workshop-Desk-Setup.exe" -D prev 2>$null
+          if (Test-Path prev\ABS-Workshop-Desk-Setup.exe) { "Earlier version kept" } else { "No earlier version yet" }
+
       - name: 6. Publish the download
         uses: softprops/action-gh-release@v2
         with:
@@ -107,5 +126,37 @@ jobs:
             **Android:** https://www.absmotsauto.co.uk/admin/download/android
 
             Every build is installed, opened and checked on Windows or an Android phone before it is published.
-          files: dist/ABS-Workshop-Desk-Setup.exe
+          files: |
+            dist/ABS-Workshop-Desk-Setup.exe
+            dist/ABS-Workshop-Desk-Setup.exe.blockmap
+            dist/latest.yml
           make_latest: true
+
+      - name: 7. Check an installed app updates itself to this version
+        shell: pwsh
+        run: |
+          $prev = "prev\ABS-Workshop-Desk-Setup.exe"
+          if (-not (Test-Path $prev)) { "No earlier version to update from"; exit 0 }
+          Start-Process -FilePath $prev -ArgumentList "/S" -Wait
+          $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "ABS MOTS.exe" | Select-Object -First 1).FullName
+          $old = (Get-Item $exe).VersionInfo.ProductVersion
+          "Installed the earlier version: $old"
+          if (-not (Test-Path (Join-Path (Split-Path $exe) "resources\app-update.yml"))) {
+            "That version came before self-update, so it cannot update itself; every version from now on can."
+            Start-Process -FilePath (Get-ChildItem (Split-Path $exe) -Filter "Uninstall*.exe").FullName -ArgumentList "/S" -Wait
+            exit 0
+          }
+          $env:ABS_UPDATE_NOW = "1"
+          Start-Process -FilePath $exe
+          $deadline = (Get-Date).AddMinutes(8)
+          do {
+            Start-Sleep -Seconds 15
+            $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "ABS MOTS.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+            $now = if ($exe) { (Get-Item $exe).VersionInfo.ProductVersion } else { "" }
+            "Installed version: $now"
+          } until ($now -eq $env:NEW_VERSION -or (Get-Date) -gt $deadline)
+          Stop-Process -Name "ABS MOTS" -Force -ErrorAction SilentlyContinue
+          if ($now -ne $env:NEW_VERSION) { throw "The installed app did not update itself from $old to $env:NEW_VERSION" }
+          "Updated itself from $old to $now with nobody touching it"
+          Start-Sleep -Seconds 3
+          Start-Process -FilePath (Get-ChildItem (Split-Path $exe) -Filter "Uninstall*.exe").FullName -ArgumentList "/S" -Wait
