@@ -1,0 +1,67 @@
+{
+  "name": "abs-workshop-desk",
+  "productName": "ABS MOTS",
+  "version": "1.4.0",
+  "description": "ABS MOTS admin desk for ABS MOTs & Auto Repairs",
+  "author": "ABS MOTs & Auto Repairs",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:mac": "electron-builder --mac dmg --universal"
+  },
+  "build": {
+    "appId": "uk.co.absmotsauto.admin",
+    "productName": "ABS MOTS",
+    "copyright": "Copyright ABS MOTS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.png",
+      "icon.ico",
+      "icon.icns"
+    ],
+    "artifactName": "ABS-Workshop-Desk-Setup.${ext}",
+    "mac": {
+      "icon": "icon.icns",
+      "category": "public.app-category.business",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "ABS MOTS"
+    },
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ABS MOTS",
+      "uninstallDisplayName": "ABS MOTS"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  }
+}

@@ -1,0 +1,97 @@
+name: Windows app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 1. Install build tools
+        run: npm ci
+
+      - name: 2. Build the Windows installer
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: 3. Install it (as a user would, silently)
+        shell: pwsh
+        run: |
+          $setup = "dist\ABS-Workshop-Desk-Setup.exe"
+          if (-not (Test-Path $setup)) { throw "Installer was not built" }
+          "Installer: {0:N1} MB" -f ((Get-Item $setup).Length / 1MB)
+          Start-Process -FilePath $setup -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "ABS MOTS.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "ABS MOTS.exe was not installed" }
+          "Installed: $($exe.FullName)"
+          "EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $start = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+          if (-not (Test-Path (Join-Path $desktop "ABS MOTS.lnk"))) { throw "No desktop shortcut" }
+          if (-not (Get-ChildItem $start -Recurse -Filter "ABS MOTS.lnk")) { throw "No Start menu shortcut" }
+          "Desktop and Start menu shortcuts: OK"
+
+      - name: 4. Open the app and check the ABS admin desk
+        shell: pwsh
+        run: |
+          $app = Start-Process -FilePath $env:EXE -ArgumentList "--remote-debugging-port=9222" -PassThru
+          node test/desk-check.mjs
+          if ($LASTEXITCODE -ne 0) { throw "App check failed" }
+          Start-Sleep -Seconds 2
+          $title = (Get-Process -Name "ABS MOTS" | Where-Object { $_.MainWindowTitle } | Select-Object -First 1).MainWindowTitle
+          "Window title: $title"
+          if ($title -ne "(3) ABS MOTS") { throw "Waiting-bookings count did not reach the window title" }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("windows-screen.png")
+          Stop-Process -Name "ABS MOTS" -Force -ErrorAction SilentlyContinue
+
+      - name: 5. Uninstall it
+        shell: pwsh
+        run: |
+          Start-Sleep -Seconds 3
+          $dir = Split-Path $env:EXE
+          $un = Get-ChildItem $dir -Filter "Uninstall*.exe" | Select-Object -First 1
+          if (-not $un) { throw "No uninstaller" }
+          Start-Process -FilePath $un.FullName -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path $env:EXE) { throw "App is still there after uninstall" }
+          "Uninstalled cleanly"
+
+      - name: Keep the installer and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: |
+            dist/ABS-Workshop-Desk-Setup.exe
+            desk-screenshot.png
+            windows-screen.png
+          if-no-files-found: ignore
+
+      - name: 6. Publish the download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-${{ github.run_number }}
+          name: ABS Workshop Desk for Windows (build ${{ github.run_number }})
+          body: |
+            ABS MOTs & Auto Repairs admin desk for Windows. Sign in with the workshop email and password.
+
+            Download: https://www.absmotsauto.co.uk/admin/download/windows
+
+            Checked on Windows before publishing: installed, opened the ABS admin desk, reached the website, uninstalled.
+          files: dist/ABS-Workshop-Desk-Setup.exe
+          make_latest: true
