@@ -63,7 +63,9 @@ function createWindow() {
     title: "ABS MOTS",
     backgroundColor: "#1c1c1c",
     autoHideMenuBar: false,
-    icon: path.join(__dirname, "icon.png"),
+    // Windows picks the right size from the .ico (the ABS letters at taskbar size,
+    // the whole logo when large); a 1024 px PNG shrinks to an unreadable smudge.
+    icon: path.join(__dirname, process.platform === "win32" ? "icon.ico" : "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,

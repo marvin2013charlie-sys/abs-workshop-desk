@@ -49,7 +49,11 @@ jobs:
           if (-not (Test-Path $setup)) { throw "Installer was not built" }
           "Installer: {0:N1} MB" -f ((Get-Item $setup).Length / 1MB)
           Start-Process -FilePath $setup -ArgumentList "/S" -Wait
-          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "ABS MOTS.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          # The silent installer can hand back before its last file lands.
+          for ($i = 0; $i -lt 30 -and -not $exe; $i++) {
+            $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "ABS MOTS.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $exe) { Start-Sleep -Seconds 2 }
+          }
           if (-not $exe) { throw "ABS MOTS.exe was not installed" }
           "Installed: $($exe.FullName) (version $((Get-Item $exe.FullName).VersionInfo.ProductVersion))"
           if (-not (Test-Path (Join-Path $exe.DirectoryName "resources\app-update.yml"))) { throw "The app has no self-update settings" }
